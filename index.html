@@ -1,0 +1,175 @@
+import { useState, useEffect, useCallback } from "react";
+
+const C = {
+  bg:"#0C0C0C",card:"#141414",card2:"#1C1C1C",border:"#2A2A2A",
+  primary:"#E8C840",accent:"#C8A820",green:"#7DBF6E",blue:"#6AABCC",
+  text:"#E8E8E8",muted:"#505050",yellow:"#E8C840",dim:"#1A1A1A",soft:"#888",
+};
+const G = {CHEST:"Chest",BACK:"Back",SHOULDERS:"Shoulders",BICEPS:"Biceps",TRICEPS:"Triceps",QUADS:"Quads",HAMSTRINGS:"Hamstrings",CALVES:"Calves",GLUTES:"Glutes",CORE:"Core & Abs",FOREARMS:"Forearms",FULL:"Full Body"};
+const GC = {Chest:{c:"#E8C840"},Back:{c:"#D4A820"},Shoulders:{c:"#C89030"},Biceps:{c:"#B87840"},Triceps:{c:"#C8A040"},"Quads":{c:"#A8B840"},"Hamstrings":{c:"#90A830"},"Calves":{c:"#78A060"},"Glutes":{c:"#C87840"},"Core & Abs":{c:"#A0C840"},"Forearms":{c:"#B0A040"},"Full Body":{c:"#E8C840"}};
+const STORAGE_KEY="mygymtrackr-v1";
+const defaultData={workouts:{},metrics:[],goals:{}};
+function today(){return new Date().toISOString().split("T")[0];}
+function fmtDate(s){if(!s)return"";const[y,m,d]=s.split("-");return`${d}/${m}/${y}`;}
+function monthKey(y,m){return`${y}-${String(m+1).padStart(2,"0")}`;}
+const inp={background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:14,width:"100%",boxSizing:"border-box",outline:"none"};
+const btn=(bg,c="#000")=>({background:bg,border:"none",borderRadius:8,padding:"10px 14px",color:c,fontSize:13,cursor:"pointer",fontWeight:700});
+
+function MuscleDiagram({group,size=42}){
+  const hi=C.primary,hi2=C.accent,dim="#222",line="#2E2E2E";
+  const parts=[
+    ["head","circle",{cx:20,cy:7,r:6.5},[]],
+    ["neck","rect",{x:17.5,y:12.5,w:5,h:4,rx:2},[]],
+    ["trap-l","ellipse",{cx:8,cy:18,rx:6,ry:4.5},["Back","Shoulders"]],
+    ["trap-r","ellipse",{cx:32,cy:18,rx:6,ry:4.5},["Back","Shoulders"]],
+    ["chest","rect",{x:11,y:16,w:18,h:12,rx:4},["Chest"]],
+    ["sho-l","circle",{cx:5,cy:20,r:4.5},["Shoulders"]],
+    ["sho-r","circle",{cx:35,cy:20,r:4.5},["Shoulders"]],
+    ["bic-l","rect",{x:1,y:24,w:6,h:11,rx:3},["Biceps"]],
+    ["bic-r","rect",{x:33,y:24,w:6,h:11,rx:3},["Biceps"]],
+    ["tri-l","rect",{x:0,y:24,w:5,h:11,rx:3},["Triceps"]],
+    ["tri-r","rect",{x:35,y:24,w:5,h:11,rx:3},["Triceps"]],
+    ["fore-l","rect",{x:0,y:35,w:5,h:9,rx:3},["Forearms"]],
+    ["fore-r","rect",{x:35,y:35,w:5,h:9,rx:3},["Forearms"]],
+    ["abs","rect",{x:13,y:28,w:14,h:12,rx:4},["Core & Abs"]],
+    ["obl-l","rect",{x:9,y:28,w:5,h:10,rx:2},["Core & Abs"]],
+    ["obl-r","rect",{x:26,y:28,w:5,h:10,rx:2},["Core & Abs"]],
+    ["hip","rect",{x:10,y:40,w:20,h:8,rx:4},["Glutes"]],
+    ["quad-l","rect",{x:10,y:48,w:9,h:14,rx:4},["Quads","Hamstrings"]],
+    ["quad-r","rect",{x:21,y:48,w:9,h:14,rx:4},["Quads","Hamstrings"]],
+    ["calf-l","rect",{x:11,y:62,w:7,h:10,rx:3},["Calves"]],
+    ["calf-r","rect",{x:22,y:62,w:7,h:10,rx:3},["Calves"]],
+  ];
+  const fullGroups=["Chest","Back","Shoulders","Biceps","Triceps","Quads","Core & Abs","Glutes","Calves"];
+  return(
+    <svg width={size} height={size*1.75} viewBox="0 0 40 74" style={{flexShrink:0}}>
+      {parts.map(([id,type,p,groups])=>{
+        const isHi=groups.includes(group)||(group==="Full Body"&&fullGroups.some(g=>groups.includes(g)));
+        const f=isHi?hi:dim,str=isHi?hi2:line,sw=isHi?0.8:0.4;
+        if(type==="circle") return <circle key={id} cx={p.cx} cy={p.cy} r={p.r} fill={f} stroke={str} strokeWidth={sw}/>;
+        if(type==="ellipse") return <ellipse key={id} cx={p.cx} cy={p.cy} rx={p.rx} ry={p.ry} fill={f} stroke={str} strokeWidth={sw}/>;
+        return <rect key={id} x={p.x} y={p.y} width={p.w} height={p.h} rx={p.rx} fill={f} stroke={str} strokeWidth={sw}/>;
+      })}
+    </svg>
+  );
+}
+
+const EX=[
+  {id:1,n:"Barbell Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Lie flat, lower bar to chest, press up. King of chest mass builders."},
+  {id:2,n:"Incline Barbell Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"30-45° bench targets upper pecs for a full shelf."},
+  {id:3,n:"Decline Barbell Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Bench at -15°. Maximises lower pec development."},
+  {id:4,n:"Close-Grip Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Narrow grip stresses triceps and inner chest together."},
+  {id:5,n:"Floor Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Lie on floor limiting ROM. Great for lockout strength."},
+  {id:6,n:"Dumbbell Bench Press",g:"Chest",eq:"Dumbbell",tp:"Compound",desc:"Greater ROM than barbell, each side works independently."},
+  {id:7,n:"Incline Dumbbell Press",g:"Chest",eq:"Dumbbell",tp:"Compound",desc:"Stretches upper pecs fully at bottom for maximum activation."},
+  {id:8,n:"Decline Dumbbell Press",g:"Chest",eq:"Dumbbell",tp:"Compound",desc:"Targets lower pecs with free movement for natural arc."},
+  {id:9,n:"Dumbbell Flye",g:"Chest",eq:"Dumbbell",tp:"Isolation",desc:"Wide arc, slight elbow bend. Full pec stretch-contraction."},
+  {id:10,n:"Incline Dumbbell Flye",g:"Chest",eq:"Dumbbell",tp:"Isolation",desc:"Targets upper-inner chest with deep stretch on incline."},
+  {id:11,n:"Decline Dumbbell Flye",g:"Chest",eq:"Dumbbell",tp:"Isolation",desc:"Isolates lower chest fibres through stretch-contraction arc."},
+  {id:12,n:"Dumbbell Pullover",g:"Chest",eq:"Dumbbell",tp:"Isolation",desc:"Arc dumbbell overhead targeting serratus and chest."},
+  {id:13,n:"Cable Crossover (High to Low)",g:"Chest",eq:"Cable",tp:"Isolation",desc:"High pulleys, cross arms down. Excellent lower chest contraction."},
+  {id:14,n:"Cable Crossover (Low to High)",g:"Chest",eq:"Cable",tp:"Isolation",desc:"Low pulleys, cross arms up. Great upper chest under constant tension."},
+  {id:15,n:"Pec Deck Flye",g:"Chest",eq:"Machine",tp:"Isolation",desc:"Machine fly with constant tension through full ROM."},
+  {id:16,n:"Machine Chest Press",g:"Chest",eq:"Machine",tp:"Compound",desc:"Fixed path press. Safe for failure sets and drop sets."},
+  {id:17,n:"Smith Machine Bench Press",g:"Chest",eq:"Smith Machine",tp:"Compound",desc:"Guided barbell allows heavier loads safely."},
+  {id:18,n:"Push-Up",g:"Chest",eq:"Bodyweight",tp:"Compound",desc:"Classic compound. Full body tension, scalable via elevation."},
+  {id:19,n:"Wide-Grip Push-Up",g:"Chest",eq:"Bodyweight",tp:"Compound",desc:"Wider hands emphasises outer chest, reduces tricep role."},
+  {id:20,n:"Diamond Push-Up",g:"Chest",eq:"Bodyweight",tp:"Compound",desc:"Hands diamond shape. Heavy triceps and inner chest focus."},
+  {id:21,n:"Decline Push-Up",g:"Chest",eq:"Bodyweight",tp:"Compound",desc:"Feet elevated targets upper chest with more deltoid work."},
+  {id:22,n:"Chest Dip",g:"Chest",eq:"Bodyweight",tp:"Compound",desc:"Lean forward 20-30° while dipping. Heavy lower-chest stimulus."},
+  {id:23,n:"Weighted Chest Dip",g:"Chest",eq:"Bodyweight+Weight",tp:"Compound",desc:"Belt-loaded dips for progressive overload on lower chest."},
+  {id:24,n:"Svend Press",g:"Chest",eq:"Plates",tp:"Isolation",desc:"Squeeze plate at chest and press forward. Inner chest isolation."},
+  {id:25,n:"Landmine Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Angled barbell press targets upper chest safely."},
+  {id:26,n:"Hex Press",g:"Chest",eq:"Dumbbell",tp:"Compound",desc:"Press dumbbells together throughout. Inner chest squeeze."},
+  {id:27,n:"Pause Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Hold bar on chest 2s before pressing. Eliminates bounce."},
+  {id:28,n:"Tempo Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Slow 3-4s eccentric. Time under tension for hypertrophy."},
+  {id:29,n:"Wide-Grip Bench Press",g:"Chest",eq:"Barbell",tp:"Compound",desc:"Hands outside shoulder width. Greater pec stretch."},
+  {id:30,n:"Band Chest Press",g:"Chest",eq:"Band",tp:"Compound",desc:"Resistance band press. Accommodating resistance peaks at lockout."},
+  {id:31,n:"Conventional Deadlift",g:"Back",eq:"Barbell",tp:"Compound",desc:"Pull bar from floor locking hips and knees. King of all exercises."},
+  {id:32,n:"Sumo Deadlift",g:"Back",eq:"Barbell",tp:"Compound",desc:"Wide stance, toes out. More hip, less lower-back strain."},
+  {id:33,n:"Romanian Deadlift",g:"Back",eq:"Barbell",tp:"Compound",desc:"Hip hinge with near-straight legs. Loads hamstrings through stretch."},
+  {id:34,n:"Rack Pull",g:"Back",eq:"Barbell",tp:"Compound",desc:"Bar at knee height. Builds trap and erector thickness."},
+  {id:35,n:"Trap Bar Deadlift",g:"Back",eq:"Trap Bar",tp:"Compound",desc:"Neutral grip hex bar, more upright torso for quad+back combo."},
+  {id:36,n:"Barbell Row (Overhand)",g:"Back",eq:"Barbell",tp:"Compound",desc:"Hinge 45°, pull to lower chest. Rhomboids, lats, rear delts."},
+  {id:37,n:"Yates Row (Underhand)",g:"Back",eq:"Barbell",tp:"Compound",desc:"Upright torso, underhand grip. Dorian Yates mid-back thickness."},
+  {id:38,n:"Pendlay Row",g:"Back",eq:"Barbell",tp:"Compound",desc:"Bar returns to floor each rep. Strict for explosive strength."},
+  {id:39,n:"T-Bar Row",g:"Back",eq:"Barbell",tp:"Compound",desc:"Neutral grip. Excellent mid-back and lat thickness builder."},
+  {id:40,n:"Seated Cable Row (Narrow)",g:"Back",eq:"Cable",tp:"Compound",desc:"V-bar pull to abdomen. Constant tension for mid-back fullness."},
+  {id:41,n:"Seated Cable Row (Wide)",g:"Back",eq:"Cable",tp:"Compound",desc:"Wide grip targets outer lats and rear delts."},
+  {id:42,n:"Single-Arm Dumbbell Row",g:"Back",eq:"Dumbbell",tp:"Compound",desc:"Brace on bench, pull to hip. Full lat engagement per side."},
+  {id:43,n:"Wide-Grip Lat Pulldown",g:"Back",eq:"Cable",tp:"Compound",desc:"Pull wide bar to upper chest. Classic lat width builder."},
+  {id:44,n:"Close-Grip Lat Pulldown",g:"Back",eq:"Cable",tp:"Compound",desc:"Narrow parallel grip, pull to chin. More inner lat and bicep."},
+  {id:45,n:"Reverse-Grip Lat Pulldown",g:"Back",eq:"Cable",tp:"Compound",desc:"Underhand grip. Shifts to lower lats and biceps."},
+  {id:46,n:"Straight-Arm Lat Pulldown",g:"Back",eq:"Cable",tp:"Isolation",desc:"Arms nearly straight, push bar down. Pure lat isolation."},
+  {id:47,n:"Pull-Up (Overhand)",g:"Back",eq:"Bodyweight",tp:"Compound",desc:"Dead hang, pull chest to bar. Ultimate lat width movement."},
+  {id:48,n:"Chin-Up (Underhand)",g:"Back",eq:"Bodyweight",tp:"Compound",desc:"Underhand emphasises biceps and lower lats."},
+  {id:49,n:"Neutral-Grip Pull-Up",g:"Back",eq:"Bodyweight",tp:"Compound",desc:"Parallel handles. Shoulder-friendly with brachialis focus."},
+  {id:50,n:"Weighted Pull-Up",g:"Back",eq:"Bodyweight+Weight",tp:"Compound",desc:"Belt weight for progressive overload on pull-up strength."},
+  {id:51,n:"Inverted Row",g:"Back",eq:"Bodyweight",tp:"Compound",desc:"Body horizontal under bar, pull chest to bar. Scalable."},
+  {id:52,n:"Good Morning",g:"Back",eq:"Barbell",tp:"Compound",desc:"Bar on traps, hinge forward. Trains entire posterior chain."},
+  {id:53,n:"Hyperextension",g:"Back",eq:"Machine",tp:"Isolation",desc:"Face-down, extend at hips. Isolates lower back and glutes."},
+  {id:54,n:"Reverse Hyperextension",g:"Back",eq:"Machine",tp:"Isolation",desc:"Torso fixed, raise legs. Decompresses spine while training posterior."},
+  {id:55,n:"Barbell Shrug",g:"Back",eq:"Barbell",tp:"Isolation",desc:"Shrug up with heavy load. Upper trap thickness builder."},
+  {id:56,n:"Dumbbell Shrug",g:"Back",eq:"Dumbbell",tp:"Isolation",desc:"Greater ROM than barbell. Better peak contraction for traps."},
+  {id:57,n:"Cable Shrug",g:"Back",eq:"Cable",tp:"Isolation",desc:"Constant tension shrug for trap endurance."},
+  {id:58,n:"Meadows Row",g:"Back",eq:"Barbell",tp:"Compound",desc:"Single arm T-bar landmine row. Intense lat stretch-contraction."},
+  {id:59,n:"Renegade Row",g:"Back",eq:"Dumbbell",tp:"Compound",desc:"Plank position row. Anti-rotation core + lat training."},
+  {id:60,n:"TRX Row",g:"Back",eq:"TRX",tp:"Compound",desc:"Suspension strap row. Difficulty adjustable by body angle."},
+  {id:61,n:"Barbell Overhead Press",g:"Shoulders",eq:"Barbell",tp:"Compound",desc:"Press bar overhead. Full deltoid, trap and core involvement."},
+  {id:62,n:"Seated Barbell Overhead Press",g:"Shoulders",eq:"Barbell",tp:"Compound",desc:"Seated removes leg drive. Strict deltoid and tricep stimulus."},
+  {id:63,n:"Dumbbell Shoulder Press",g:"Shoulders",eq:"Dumbbell",tp:"Compound",desc:"Natural pressing path with independent arm movement."},
+  {id:64,n:"Arnold Press",g:"Shoulders",eq:"Dumbbell",tp:"Compound",desc:"Palms facing in, rotate outward while pressing. All three delt heads."},
+  {id:65,n:"Push Press",g:"Shoulders",eq:"Barbell",tp:"Compound",desc:"Leg drive into press. Allows heavier overhead loads."},
+  {id:66,n:"Machine Shoulder Press",g:"Shoulders",eq:"Machine",tp:"Compound",desc:"Guided overhead pressing for drop sets and beginners."},
+  {id:67,n:"Dumbbell Lateral Raise",g:"Shoulders",eq:"Dumbbell",tp:"Isolation",desc:"Raise arms to sides until parallel. Primary medial delt isolation."},
+  {id:68,n:"Cable Lateral Raise",g:"Shoulders",eq:"Cable",tp:"Isolation",desc:"Constant tension. Superior medial delt activation vs dumbbell."},
+  {id:69,n:"Machine Lateral Raise",g:"Shoulders",eq:"Machine",tp:"Isolation",desc:"Fixed-path lateral raise for strict isolation with safety."},
+  {id:70,n:"Face Pull",g:"Shoulders",eq:"Cable",tp:"Compound",desc:"Pull rope to face with external rotation. Rear delt + rotator cuff."},
+  {id:71,n:"Dumbbell Rear Delt Flye",g:"Shoulders",eq:"Dumbbell",tp:"Isolation",desc:"Bent over, raise arms laterally. Targets posterior deltoid."},
+  {id:72,n:"Machine Rear Delt Flye",g:"Shoulders",eq:"Machine",tp:"Isolation",desc:"Pec deck in reverse. Guided path for strict rear delt isolation."},
+  {id:73,n:"Dumbbell Front Raise",g:"Shoulders",eq:"Dumbbell",tp:"Isolation",desc:"Raise arms forward to shoulder height. Anterior deltoid isolation."},
+  {id:74,n:"Cable Front Raise",g:"Shoulders",eq:"Cable",tp:"Isolation",desc:"Low pulley front raise. Constant tension through full ROM."},
+  {id:75,n:"Upright Row",g:"Shoulders",eq:"Barbell",tp:"Compound",desc:"Pull bar to chin. Trains medial delts and traps simultaneously."},
+  {id:76,n:"Band Pull-Apart",g:"Shoulders",eq:"Band",tp:"Isolation",desc:"Pull band apart horizontally. Rear delt and upper back warm-up."},
+  {id:77,n:"Handstand Push-Up",g:"Shoulders",eq:"Bodyweight",tp:"Compound",desc:"Inverted push-up against wall. Elite overhead pressing strength."},
+  {id:78,n:"Pike Push-Up",g:"Shoulders",eq:"Bodyweight",tp:"Compound",desc:"Hips raised high, press down. Shoulder-focused bodyweight."},
+  {id:79,n:"Bottoms-Up KB Press",g:"Shoulders",eq:"Kettlebell",tp:"Compound",desc:"Press KB inverted. Extreme shoulder stability demand."},
+  {id:80,n:"Prone Rear Delt Raise",g:"Shoulders",eq:"Dumbbell",tp:"Isolation",desc:"Lie face down on incline, raise arms. Strict rear delt."},
+  {id:81,n:"Barbell Curl",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"Classic mass builder. Full ROM from extension to peak."},
+  {id:82,n:"EZ-Bar Curl",g:"Biceps",eq:"EZ-Bar",tp:"Isolation",desc:"Angled grip reduces wrist strain. Hits both bicep heads."},
+  {id:83,n:"Alternating Dumbbell Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Supinate at top for peak contraction. Full focus each rep."},
+  {id:84,n:"Hammer Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Neutral grip. Targets brachialis for arm thickness."},
+  {id:85,n:"Concentration Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Elbow on inner thigh. Extreme peak bicep contraction."},
+  {id:86,n:"Preacher Curl (Barbell)",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"Upper arm fixed on pad. Eliminates cheating, hammers short head."},
+  {id:87,n:"Preacher Curl (EZ-Bar)",g:"Biceps",eq:"EZ-Bar",tp:"Isolation",desc:"Wrist-friendly version with full short-head focus."},
+  {id:88,n:"Preacher Curl (Dumbbell)",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Single arm on pad. Allows supination for peak contraction."},
+  {id:89,n:"Incline Dumbbell Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Arms hang straight on incline. Maximises long head stretch."},
+  {id:90,n:"Cable Curl (Bar)",g:"Biceps",eq:"Cable",tp:"Isolation",desc:"Low pulley straight bar curl. Constant tension through full ROM."},
+  {id:91,n:"Cable Curl (Rope)",g:"Biceps",eq:"Cable",tp:"Isolation",desc:"Rope allows wrist supination for improved peak contraction."},
+  {id:92,n:"High Cable Curl",g:"Biceps",eq:"Cable",tp:"Isolation",desc:"Arms at shoulder height, curl toward face. Peak contraction pose."},
+  {id:93,n:"Reverse Barbell Curl",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"Overhand grip. Trains brachialis and brachioradialis."},
+  {id:94,n:"Zottman Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Curl up supinated, lower pronated. Bicep + forearm training."},
+  {id:95,n:"21s",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"7 lower + 7 upper + 7 full range. Intense bicep pump technique."},
+  {id:96,n:"Drag Curl",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"Bar stays against body dragging up. Elbows back, long head focus."},
+  {id:97,n:"Spider Curl",g:"Biceps",eq:"Barbell",tp:"Isolation",desc:"Chest on incline edge, curl from hang. Pure short head."},
+  {id:98,n:"Bayesian Curl",g:"Biceps",eq:"Cable",tp:"Isolation",desc:"Face away from cable, arms stretched behind. Max long head stretch."},
+  {id:99,n:"Cross-Body Hammer Curl",g:"Biceps",eq:"Dumbbell",tp:"Isolation",desc:"Neutral grip curl across body. Brachialis with good ROM."},
+  {id:100,n:"TRX Bicep Curl",g:"Biceps",eq:"TRX",tp:"Isolation",desc:"Hold TRX handles, walk feet forward, curl body up."},
+  {id:101,n:"Close-Grip Bench Press",g:"Triceps",eq:"Barbell",tp:"Compound",desc:"Hands shoulder-width, lower to chest. Best compound tricep mass."},
+  {id:102,n:"Skull Crusher (EZ-Bar)",g:"Triceps",eq:"EZ-Bar",tp:"Isolation",desc:"Lower bar to forehead. Classic long head isolation and mass."},
+  {id:103,n:"Skull Crusher (Dumbbell)",g:"Triceps",eq:"Dumbbell",tp:"Isolation",desc:"Independent arm movement and neutral wrist option."},
+  {id:104,n:"Skull Crusher (Barbell)",g:"Triceps",eq:"Barbell",tp:"Isolation",desc:"Straight bar for maximum overload potential."},
+  {id:105,n:"Tricep Dip",g:"Triceps",eq:"Bodyweight",tp:"Compound",desc:"Upright dip, elbows close. Minimal forward lean for tricep focus."},
+  {id:106,n:"Weighted Tricep Dip",g:"Triceps",eq:"Bodyweight+Weight",tp:"Compound",desc:"Added weight for progressive overload on dips."},
+  {id:107,n:"Overhead Tricep Extension (EZ-Bar)",g:"Triceps",eq:"EZ-Bar",tp:"Isolation",desc:"Arms overhead, lower behind head. Maximum long head stretch."},
+  {id:108,n:"Overhead Tricep Extension (Dumbbell)",g:"Triceps",eq:"Dumbbell",tp:"Isolation",desc:"Great long head ROM with shoulder safety."},
+  {id:109,n:"Overhead Cable Tricep Extension",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"Rope overhead extension. Constant tension long head builder."},
+  {id:110,n:"Tricep Pushdown (Straight Bar)",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"Press bar down from high cable. Classic lateral and medial head."},
+  {id:111,n:"Tricep Pushdown (Rope)",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"Hands diverge at bottom for greater outer head contraction."},
+  {id:112,n:"Tricep Pushdown (V-Bar)",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"V-bar provides comfortable wrist for strict pushdowns."},
+  {id:113,n:"Reverse-Grip Pushdown",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"Underhand grip targets medial head. Unique tricep stimulus."},
+  {id:114,n:"Kickback (Dumbbell)",g:"Triceps",eq:"Dumbbell",tp:"Isolation",desc:"Upper arm parallel to floor, extend hand back. Peak at extension."},
+  {id:115,n:"Kickback (Cable)",g:"Triceps",eq:"Cable",tp:"Isolation",desc:"Constant tension version. Superior activation vs dumbbell."},
+  {id:116,n:"JM Press",g:"Triceps",eq:"Barbell",tp:"Compound",desc:"Hybrid skull crusher + close-grip press. Powerlifter's mass builder."},
+  {id:117,n:"Tate Press",g:"Triceps",eq:"Dumbbell",tp:"Isolation",desc:"Elbows flared out, lower to chest then extend. Unique stimulus."},
+  {id:118,n:"Rolling Tricep Extension",g:"Triceps",eq:"Dumbbell",tp:"Isolation",desc:"Skull crusher into pullover motion. Long 
